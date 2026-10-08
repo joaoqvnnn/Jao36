@@ -147,7 +147,9 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     email = update.message.text.strip()
     if "@" not in email or "." not in email.split("@")[-1]:
-        await update.message.reply_text("Hmm, esse e-mail parece inválido. Tente novamente:")
+        await update.message.reply_text(
+            "Hmm, esse e-mail parece inválido. Tente novamente:"
+        )
         return EMAIL
 
     context.user_data["email"] = email
@@ -159,8 +161,7 @@ async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         send_email_code(email, codigo)
     except Exception as e:
         await update.message.reply_text(
-            f"❌ Erro ao enviar e-mail: {e}\n"
-            "Tente novamente com outro e-mail."
+            f"❌ Erro ao enviar e-mail: {e}\n" "Tente novamente com outro e-mail."
         )
         return EMAIL
 
@@ -213,8 +214,7 @@ async def get_descricao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     pasta_pdf = DATA_DIR / "pdfs"
     pasta_pdf.mkdir(exist_ok=True)
     nome_pdf = pasta_pdf / (
-        f"formulario_{update.effective_user.id}_"
-        f"{int(datetime.now().timestamp())}.pdf"
+        f"formulario_{update.effective_user.id}_" f"{int(datetime.now().timestamp())}.pdf"
     )
 
     gerar_pdf(dados, nome_pdf)
@@ -238,8 +238,14 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 # ---------- MAIN ----------
-async def main_async() -> None:
-    """Função principal assíncrona — cria o app e roda o polling."""
+def main() -> None:
+    # ✅ CORREÇÃO para Python 3.14: cria e registra um event loop manualmente
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    except Exception as e:
+        print(f"Aviso ao configurar event loop: {e}")
+
     app = Application.builder().token(BOT_TOKEN).build()
 
     conv = ConversationHandler(
@@ -255,23 +261,8 @@ async def main_async() -> None:
     )
 
     app.add_handler(conv)
-
     print("🤖 Bot iniciado...")
-    await app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-
-def main() -> None:
-    """Ponto de entrada — cria o event loop e roda a função async."""
-    try:
-        asyncio.run(main_async())
-    except RuntimeError as e:
-        # Fallback para ambientes antigos (Python 3.9 ou inferior)
-        if "event loop" in str(e).lower():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(main_async())
-        else:
-            raise
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
