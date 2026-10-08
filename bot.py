@@ -2,6 +2,7 @@ import os
 import json
 import random
 import smtplib
+import asyncio
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -54,9 +55,14 @@ def send_email_code(to_email: str, code: str) -> None:
 
 # ---------- GERAÇÃO DO PDF ----------
 def gerar_pdf(dados: dict, caminho: Path) -> None:
-    doc = SimpleDocTemplate(str(caminho), pagesize=A4,
-                            leftMargin=2*cm, rightMargin=2*cm,
-                            topMargin=2*cm, bottomMargin=2*cm)
+    doc = SimpleDocTemplate(
+        str(caminho),
+        pagesize=A4,
+        leftMargin=2 * cm,
+        rightMargin=2 * cm,
+        topMargin=2 * cm,
+        bottomMargin=2 * cm,
+    )
     styles = getSampleStyleSheet()
     titulo_style = ParagraphStyle("titulo", parent=styles["Title"], fontSize=18)
     corpo = styles["Normal"]
@@ -73,12 +79,16 @@ def gerar_pdf(dados: dict, caminho: Path) -> None:
         ["E-mail", dados["email"]],
     ]
     tabela = Table(tabela_dados, colWidths=[4 * cm, 12 * cm])
-    tabela.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("PADDING", (0, 0), (-1, -1), 6),
-    ]))
+    tabela.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("PADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
     elementos.append(tabela)
     elementos.append(Spacer(1, 0.8 * cm))
     elementos.append(Paragraph("<b>Descrição:</b>", styles["Heading2"]))
@@ -228,7 +238,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 # ---------- MAIN ----------
-def main() -> None:
+async def main_async() -> None:
+    """Função principal assíncrona — cria o app e roda o polling."""
     app = Application.builder().token(BOT_TOKEN).build()
 
     conv = ConversationHandler(
@@ -244,8 +255,23 @@ def main() -> None:
     )
 
     app.add_handler(conv)
+
     print("🤖 Bot iniciado...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+def main() -> None:
+    """Ponto de entrada — cria o event loop e roda a função async."""
+    try:
+        asyncio.run(main_async())
+    except RuntimeError as e:
+        # Fallback para ambientes antigos (Python 3.9 ou inferior)
+        if "event loop" in str(e).lower():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(main_async())
+        else:
+            raise
 
 
 if __name__ == "__main__":
