@@ -3,6 +3,8 @@ import json
 import random
 import smtplib
 import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -34,6 +36,26 @@ DATA_DIR.mkdir(exist_ok=True)
 # Estados da conversa
 NAME, PHONE, EMAIL, CODE, DESCRICAO = range(5)
 MAX_CODE_ATTEMPTS = 3
+
+
+# ---------- HEALTH SERVER (para o Render não reclamar de porta) ----------
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"ok")
+
+    def log_message(self, format, *args):
+        pass  # silencia logs do servidor HTTP
+
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"🌐 Health server rodando na porta {port}")
 
 
 # ---------- ENVIO DE E-MAIL ----------
@@ -161,7 +183,7 @@ async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         send_email_code(email, codigo)
     except Exception as e:
         await update.message.reply_text(
-            f"❌ Erro ao enviar e-mail: {e}\n" "Tente novamente com outro e-mail."
+            f"❌ Erro ao enviar e-mail: {e}\nTente novamente com outro e-mail."
         )
         return EMAIL
 
@@ -214,7 +236,8 @@ async def get_descricao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     pasta_pdf = DATA_DIR / "pdfs"
     pasta_pdf.mkdir(exist_ok=True)
     nome_pdf = pasta_pdf / (
-        f"formulario_{update.effective_user.id}_" f"{int(datetime.now().timestamp())}.pdf"
+        f"formulario_{update.effective_user.id}_"
+        f"{int(datetime.now().timestamp())}.pdf"
     )
 
     gerar_pdf(dados, nome_pdf)
@@ -239,12 +262,15 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 # ---------- MAIN ----------
 def main() -> None:
-    # ✅ CORREÇÃO para Python 3.14: cria e registra um event loop manualmente
+    # Corrige o event loop no Python 3.14
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     except Exception as e:
         print(f"Aviso ao configurar event loop: {e}")
+
+    # Sobe um servidor HTTP simples só para o Render ver uma porta aberta
+    start_health_server()
 
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -255,7 +281,9 @@ def main() -> None:
             PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
             EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_email)],
             CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_code)],
-            DESCRICAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_descricao)],
+            DESCRICAO: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_descricao)
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
